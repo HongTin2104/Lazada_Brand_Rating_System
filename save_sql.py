@@ -7,6 +7,7 @@ from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium_stealth import stealth
+import mysql.connector
 
 def setup_driver():
     """Khởi tạo trình duyệt với undetected-chromedriver ở chế độ headless."""
@@ -35,8 +36,40 @@ def setup_driver():
         print(traceback.format_exc())
         return None
 
+def convert_price_to_float(price_str):
+    """Chuyển đổi chuỗi giá thành số thực (float)."""
+    try:
+        price_str = price_str.replace(",", "").replace("$", "")
+        return float(price_str)
+    except ValueError:
+        return None
+
+def save_to_mysql(data):
+    """Lưu dữ liệu vào MySQL."""
+    try:
+        # Kết nối đến MySQL (không tạo database và bảng)
+        conn = mysql.connector.connect(
+            host="localhost",
+            user="root",
+            password="Ng230204!",
+            database="amazon_data"  # Đã có sẵn database
+        )
+        cursor = conn.cursor()
+
+        # Chèn dữ liệu vào bảng `product`
+        for item in data:
+            cursor.execute("INSERT INTO product (title, price) VALUES (%s, %s)", (item['title'], item['price']))
+        
+        conn.commit()
+        print("Dữ liệu đã được lưu vào MySQL.")
+    except mysql.connector.Error as err:
+        print(f"Lỗi MySQL: {err}")
+    finally:
+        cursor.close()
+        conn.close()
+
 def scrape_amazon_search(driver, query="", max_pages=5):
-    """Truy xuất tiêu đề, giá và URL sản phẩm từ nhiều trang tìm kiếm Amazon."""
+    """Truy xuất tiêu đề và giá sản phẩm từ nhiều trang tìm kiếm Amazon."""
     try:
         search_url = f"https://www.amazon.com/s?k={query}"
         driver.get(search_url)
@@ -70,16 +103,11 @@ def scrape_amazon_search(driver, query="", max_pages=5):
                     price_whole = product.find_element(By.XPATH, ".//span[@class='a-price-whole']").text
                     price_fraction = product.find_element(By.XPATH, ".//span[@class='a-price-fraction']").text
                     price = f"{price_whole}.{price_fraction}"
+                    price = convert_price_to_float(price)
                 except:
-                    price = "Chưa cập nhật"
+                    price = None
 
-                try:
-                    url_element = product.find_element(By.XPATH, ".//a[contains(@class, 'a-link-normal s-line-clamp-2 s-link-style a-text-normal')]")
-                    url = url_element.get_attribute("href")
-                except:
-                    url = "Không có URL"
-
-                all_data.append({"title": title, "price": price, "url": url})
+                all_data.append({"title": title, "price": price})
 
             try:
                 next_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "s-pagination-next")))
@@ -97,10 +125,9 @@ def scrape_amazon_search(driver, query="", max_pages=5):
         if not all_data:
             raise Exception("Không tìm thấy sản phẩm nào!")
 
-        df = pd.DataFrame(all_data)
-        print(df)
-        df.to_csv("amazon_products.csv", index=False)
-        print("Dữ liệu đã được lưu vào 'amazon_products.csv'")
+        # Lưu vào MySQL
+        save_to_mysql(all_data)
+
     except Exception as e:
         print(f"Lỗi khi lấy dữ liệu: {e}")
         print(traceback.format_exc())
