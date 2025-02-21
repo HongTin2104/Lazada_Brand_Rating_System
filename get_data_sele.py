@@ -45,11 +45,13 @@ def scrape_amazon_search(driver, query="", max_pages=5):
         all_data = []
         page_count = 0
 
+       
         while page_count < max_pages:
             print(f"Đang thu thập dữ liệu trang {page_count + 1}...")
 
-            body = driver.find_element(By.TAG_NAME, "body")
-            for _ in range(15):
+            body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
+
+            for _ in range(10):
                 body.send_keys(Keys.PAGE_DOWN)
                 time.sleep(2)
 
@@ -70,12 +72,12 @@ def scrape_amazon_search(driver, query="", max_pages=5):
                     price_fraction = product.find_element(By.XPATH, ".//span[@class='a-price-fraction']").text
                     price = f"{price_whole}.{price_fraction}"
                 except:
-                    price = "Không có giá"
-                
+                    price = "Chưa cập nhật"
+
                 all_data.append({"title": title, "price": price})
 
             try:
-                next_button = driver.find_element(By.CLASS_NAME, "s-pagination-next")
+                next_button = wait.until(EC.element_to_be_clickable((By.CLASS_NAME, "s-pagination-next")))
                 if "s-pagination-disabled" in next_button.get_attribute("class"):
                     print("Không còn trang nào để lấy dữ liệu.")
                     break
@@ -87,13 +89,14 @@ def scrape_amazon_search(driver, query="", max_pages=5):
 
             page_count += 1
 
+
         if not all_data:
             raise Exception("Không tìm thấy sản phẩm nào!")
 
         df = pd.DataFrame(all_data)
         print(df)
-        df.to_csv("amazon_products_with_prices.csv", index=False)
-        print("Dữ liệu đã được lưu vào 'amazon_products_with_prices.csv'")
+        df.to_csv("amazon_products.csv", index=False)
+        print("Dữ liệu đã được lưu vào 'amazon_products.csv'")
     except Exception as e:
         print(f"Lỗi khi lấy dữ liệu: {e}")
         print(traceback.format_exc())
@@ -104,7 +107,7 @@ def scrape_amazon_search(driver, query="", max_pages=5):
 
 if __name__ == '__main__':
     QUERY = "logitech"
-    MAX_PAGES = 1 
+    MAX_PAGES = 6
     
     driver = setup_driver()
     if driver:
