@@ -36,49 +36,64 @@ def setup_driver():
         return None
 
 def scrape_amazon_search(driver, query="", max_pages=5):
-    """Truy xuất dữ liệu sản phẩm từ nhiều trang tìm kiếm Amazon."""
+    """Truy xuất tiêu đề và giá sản phẩm từ nhiều trang tìm kiếm Amazon."""
     try:
         search_url = f"https://www.amazon.com/s?k={query}"
         driver.get(search_url)
-        wait = WebDriverWait(driver, 30)
+        wait = WebDriverWait(driver, 10)
 
-        all_titles = []
+        all_data = []
         page_count = 0
 
         while page_count < max_pages:
             print(f"Đang thu thập dữ liệu trang {page_count + 1}...")
 
             body = driver.find_element(By.TAG_NAME, "body")
-            for _ in range(10):
+            for _ in range(15):
                 body.send_keys(Keys.PAGE_DOWN)
                 time.sleep(2)
 
             wait.until(EC.presence_of_element_located((By.XPATH, "//h2[contains(@class, 'a-size-medium a-spacing-none a-color-base a-text-normal')]")))
 
-            elems_title = driver.find_elements(By.XPATH, "//h2[contains(@class, 'a-size-medium a-spacing-none a-color-base a-text-normal')]")
-            titles = [elem.text.strip() for elem in elems_title if elem.text.strip()]
-            all_titles.extend(titles)
+            products = driver.find_elements(By.XPATH, "//div[contains(@class, 's-main-slot')]/div[@data-component-type='s-search-result']")
+
+            for product in products:
+                try:
+                    elems_title = product.find_elements(By.XPATH, ".//h2[contains(@class, 'a-size-medium a-spacing-none a-color-base a-text-normal')]")
+                    titles = [elem.text.strip() for elem in elems_title if elem.text.strip()]
+                    title = titles[0] if titles else "Không có tiêu đề"
+                except:
+                    title = "Không có tiêu đề"
+
+                try:
+                    price_whole = product.find_element(By.XPATH, ".//span[@class='a-price-whole']").text
+                    price_fraction = product.find_element(By.XPATH, ".//span[@class='a-price-fraction']").text
+                    price = f"{price_whole}.{price_fraction}"
+                except:
+                    price = "Không có giá"
+                
+                all_data.append({"title": title, "price": price})
 
             try:
                 next_button = driver.find_element(By.CLASS_NAME, "s-pagination-next")
                 if "s-pagination-disabled" in next_button.get_attribute("class"):
                     print("Không còn trang nào để lấy dữ liệu.")
-                    break 
+                    break
+                time.sleep(5)
                 next_button.click()
-                time.sleep(5) 
             except Exception:
                 print("Không tìm thấy nút 'Next', kết thúc quá trình thu thập dữ liệu.")
                 break
 
             page_count += 1
 
-        if not all_titles:
+        if not all_data:
             raise Exception("Không tìm thấy sản phẩm nào!")
 
-        df = pd.DataFrame(all_titles, columns=['title'])
+        df = pd.DataFrame(all_data)
         print(df)
-        df.to_csv("amazon_products.csv", index=False)
-        print("Dữ liệu đã được lưu vào 'amazon_products.csv'")
+        df.to_csv("amazon_products_with_prices.csv", index=False)
+        print("Dữ liệu đã được lưu vào 'amazon_products_with_prices.csv'")
     except Exception as e:
         print(f"Lỗi khi lấy dữ liệu: {e}")
         print(traceback.format_exc())
@@ -86,9 +101,10 @@ def scrape_amazon_search(driver, query="", max_pages=5):
         driver.quit()
         print("Trình duyệt đã đóng.")
 
+
 if __name__ == '__main__':
     QUERY = "logitech"
-    MAX_PAGES = 5 
+    MAX_PAGES = 1 
     
     driver = setup_driver()
     if driver:
