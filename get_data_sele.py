@@ -35,6 +35,28 @@ def setup_driver():
         print(traceback.format_exc())
         return None
 
+def scroll_to_load(driver):
+    """Cuộn trang cho đến khi không còn sản phẩm mới xuất hiện."""
+    previous_height = driver.execute_script("return document.body.scrollHeight")
+    while True:
+        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(2)
+        new_height = driver.execute_script("return document.body.scrollHeight")
+        if new_height == previous_height:
+            break
+        previous_height = new_height
+
+def check_captcha(driver):
+    """Kiểm tra và dừng nếu gặp Captcha của Amazon."""
+    try:
+        captcha_box = driver.find_element(By.XPATH, "//form[contains(@action, 'validateCaptcha')]")
+        if captcha_box:
+            print("Captcha phát hiện! Dừng thu thập dữ liệu để tránh bị chặn IP.")
+            driver.quit()
+            return True
+    except:
+        return False
+
 def scrape_amazon_search(driver, query="", max_pages=5):
     """Truy xuất tiêu đề, giá và URL sản phẩm từ nhiều trang tìm kiếm Amazon."""
     try:
@@ -48,11 +70,14 @@ def scrape_amazon_search(driver, query="", max_pages=5):
         while page_count < max_pages:
             print(f"Đang thu thập dữ liệu trang {page_count + 1}...")
 
+            # Kiểm tra Captcha
+            if check_captcha(driver):
+                break
+
             body = wait.until(EC.presence_of_element_located((By.TAG_NAME, "body")))
 
-            for _ in range(10):
-                body.send_keys(Keys.PAGE_DOWN)
-                time.sleep(2)
+            # Cuộn trang để tải đầy đủ sản phẩm
+            scroll_to_load(driver)
 
             wait.until(EC.presence_of_element_located((By.XPATH, "//h2[contains(@class, 'a-size-medium a-spacing-none a-color-base a-text-normal')]")))
 
@@ -86,8 +111,8 @@ def scrape_amazon_search(driver, query="", max_pages=5):
                 if "s-pagination-disabled" in next_button.get_attribute("class"):
                     print("Không còn trang nào để lấy dữ liệu.")
                     break
-                time.sleep(5)
                 next_button.click()
+                time.sleep(3)
             except Exception:
                 print("Không tìm thấy nút 'Next', kết thúc quá trình thu thập dữ liệu.")
                 break
@@ -111,7 +136,7 @@ def scrape_amazon_search(driver, query="", max_pages=5):
 
 if __name__ == '__main__':
     QUERY = "logitech"
-    MAX_PAGES = 6
+    MAX_PAGES = 10
     
     driver = setup_driver()
     if driver:
